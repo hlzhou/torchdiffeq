@@ -234,3 +234,4 @@ class VariableCoefficientJumpAdamsBashforth(VariableCoefficientAdamsBashforth):
 
         return _VCABMState(y1, prev_f, prev_t, next_t, prev_phi, order)
 ## [End NEW]
+
