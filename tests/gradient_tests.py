@@ -1,6 +1,6 @@
 import unittest
 import torch
-import torchdiffeq
+import njsde
 
 from problems import construct_problem
 
@@ -20,26 +20,26 @@ class TestGradient(unittest.TestCase):
 
         f, y0, t_points, _ = construct_problem(TEST_DEVICE)
 
-        func = lambda y0, t_points: torchdiffeq.odeint(f, y0, t_points, method='midpoint')
+        func = lambda y0, t_points: njsde.odeint(f, y0, t_points, method='midpoint')
         self.assertTrue(torch.autograd.gradcheck(func, (y0, t_points)))
 
     def test_rk4(self):
 
         f, y0, t_points, _ = construct_problem(TEST_DEVICE)
 
-        func = lambda y0, t_points: torchdiffeq.odeint(f, y0, t_points, method='rk4')
+        func = lambda y0, t_points: njsde.odeint(f, y0, t_points, method='rk4')
         self.assertTrue(torch.autograd.gradcheck(func, (y0, t_points)))
 
     def test_dopri5(self):
         f, y0, t_points, _ = construct_problem(TEST_DEVICE)
 
-        func = lambda y0, t_points: torchdiffeq.odeint(f, y0, t_points, method='dopri5')
+        func = lambda y0, t_points: njsde.odeint(f, y0, t_points, method='dopri5')
         self.assertTrue(torch.autograd.gradcheck(func, (y0, t_points)))
 
     def test_adams(self):
         f, y0, t_points, _ = construct_problem(TEST_DEVICE)
 
-        func = lambda y0, t_points: torchdiffeq.odeint(f, y0, t_points, method='adams')
+        func = lambda y0, t_points: njsde.odeint(f, y0, t_points, method='adams')
         self.assertTrue(torch.autograd.gradcheck(func, (y0, t_points)))
 
     def test_adjoint(self):
@@ -48,7 +48,7 @@ class TestGradient(unittest.TestCase):
         """
         f, y0, t_points, _ = construct_problem(TEST_DEVICE)
 
-        func = lambda y0, t_points: torchdiffeq.odeint(f, y0, t_points, method='dopri5')
+        func = lambda y0, t_points: njsde.odeint(f, y0, t_points, method='dopri5')
         ys = func(y0, t_points)
         torch.manual_seed(0)
         gradys = torch.rand_like(ys)
@@ -61,7 +61,7 @@ class TestGradient(unittest.TestCase):
 
         f, y0, t_points, _ = construct_problem(TEST_DEVICE)
 
-        func = lambda y0, t_points: torchdiffeq.odeint_adjoint(f, y0, t_points, method='dopri5')
+        func = lambda y0, t_points: njsde.odeint_adjoint(f, y0, t_points, method='dopri5')
         ys = func(y0, t_points)
         ys.backward(gradys)
 
@@ -97,7 +97,7 @@ class TestCompareAdjointGradient(unittest.TestCase):
 
     def test_dopri5_adjoint_against_dopri5(self):
         func, y0, t_points = self.problem()
-        ys = torchdiffeq.odeint_adjoint(func, y0, t_points, method='dopri5')
+        ys = njsde.odeint_adjoint(func, y0, t_points, method='dopri5')
         gradys = torch.rand_like(ys) * 0.1
         ys.backward(gradys)
 
@@ -108,7 +108,7 @@ class TestCompareAdjointGradient(unittest.TestCase):
         self.assertEqual(max_abs(func.unused_module.bias.grad), 0)
 
         func, y0, t_points = self.problem()
-        ys = torchdiffeq.odeint(func, y0, t_points, method='dopri5')
+        ys = njsde.odeint(func, y0, t_points, method='dopri5')
         ys.backward(gradys)
 
         self.assertLess(max_abs(y0.grad - adj_y0_grad), 3e-4)
@@ -117,7 +117,7 @@ class TestCompareAdjointGradient(unittest.TestCase):
 
     def test_adams_adjoint_against_dopri5(self):
         func, y0, t_points = self.problem()
-        ys_ = torchdiffeq.odeint_adjoint(func, y0, t_points, method='adams')
+        ys_ = njsde.odeint_adjoint(func, y0, t_points, method='adams')
         gradys = torch.rand_like(ys_) * 0.1
         ys_.backward(gradys)
 
@@ -128,7 +128,7 @@ class TestCompareAdjointGradient(unittest.TestCase):
         self.assertEqual(max_abs(func.unused_module.bias.grad), 0)
 
         func, y0, t_points = self.problem()
-        ys = torchdiffeq.odeint(func, y0, t_points, method='dopri5')
+        ys = njsde.odeint(func, y0, t_points, method='dopri5')
         ys.backward(gradys)
 
         self.assertLess(max_abs(y0.grad - adj_y0_grad), 5e-2)

@@ -1,88 +1,55 @@
-# PyTorch Implementation of Differentiable ODE Solvers
+# Discontinuity Extension to Differentiable ODE Solvers
 
-This library provides ordinary differential equation (ODE) solvers implemented in PyTorch. Backpropagation through all solvers is supported using the adjoint method. For usage of ODE solvers in deep learning applications, see [1].
-
-As the solvers are implemented in PyTorch, algorithms in this repository are fully supported to run on the GPU.
+This branch extends neural ordinary differential equation (ODE) solver with discontinuities, which describes the abrupt change in latent state caused by events. 
+Here we assume the continuous time dynamics is descriped by the following initial value problem (IVP).
+```
+dz = f(t, z) dt + w(t, z) dN     z(t_0) = z_0
+```
+where N(t) is the total number of events happend up to time t. This branch extend the 'adams' solver to handle the discontinuity in the IVP solution (as well as gradient backpropagation).
+The algorithms in this brunch is currently only tested on CPU, and GPU implementation will be added in further updates.
 
 ---
 
 <p align="center">
-  <img align="middle" src="./assets/resnet_0_viz.png" alt="Discrete-depth network" width="240" height="330" />
-  <img align="middle" src="./assets/odenet_0_viz.png" alt="Continuous-depth network" width="240" height="330" />
+  <img align="middle" src="./assets/njsde.png" alt="Jump ODE" width="500" />
 </p>
 
 ## Installation
 ```
-git clone https://github.com/rtqichen/torchdiffeq.git
-cd torchdiffeq
-pip install -e .
+pip install git+https://github.com/000Justin000/torchdiffeq.git@jj585
 ```
-
-## Examples
-Examples are placed in the [`examples`](./examples) directory.
-
-We encourage those who are interested in using this library to take a look at [`examples/ode_demo.py`](./examples/ode_demo.py) for understanding how to use `torchdiffeq` to fit a simple spiral ODE.
-
-<p align="center">
-<img align="middle" src="./assets/ode_demo.gif" alt="ODE Demo" width="500" height="250" />
-</p>
 
 ## Basic usage
-This library provides one main interface `odeint` which contains general-purpose algorithms for solving initial value problems (IVP), with gradients implemented for all main arguments. An initial value problem consists of an ODE and an initial value,
+We extend the `odeint_adjoint` interface to enable handling jump stochastic differental equations (JSDE). In our implementation, a JSDE is 
+represented as `ODEJumpFunc` (a subclass of nn.Module in pytorch). The user need to implement the follwing functions that specifies a JSDE.
+1) forward --- the dynamics of latent state.
+2) next_simulated_jump ---  the time of the next event, used in simulation.
+3) simulated_jump --- the simulated jump in the latent state, used in simulation.
+4) next_read_jump --- read next event time from input event data, used in training.
+5) read_jump --- the jump in latent state from input event data, used in training.
+
+For an example implementation of those functions, please see [modules.py](examples/modules.py). Then, the ODEJumpFunc can be passed in as
+an argument to the `odeint_adjoint` for simulating latent dynamics and stochastic events with the following.
 ```
-dy/dt = f(t, y)    y(t_0) = y_0.
+odeint(func, z0, tsave, method='jump_adams', rtol=rtol, atol=atol)
 ```
-The goal of an ODE solver is to find a continuous trajectory satisfying the ODE that passes through the initial condition.
-
-To solve an IVP using the default solver:
-```
-from torchdiffeq import odeint
-
-odeint(func, y0, t)
-```
-where `func` is any callable implementing the ordinary differential equation `f(t, x)`, `y0` is an _any_-D Tensor or a tuple of _any_-D Tensors representing the initial values, and `t` is a 1-D Tensor containing the evaluation points. The initial time is taken to be `t[0]`.
-
-Backpropagation through `odeint` goes through the internals of the solver, but this is not supported for all solvers. Instead, we encourage the use of the adjoint method explained in [1], which will allow solving with as many steps as necessary due to O(1) memory usage.
-
-To use the adjoint method:
-```
-from torchdiffeq import odeint_adjoint as odeint
-
-odeint(func, y0, t)
-```
-`odeint_adjoint` simply wraps around `odeint`, but will use only O(1) memory in exchange for solving an adjoint ODE in the backward call.
-
-The biggest **gotcha** is that `func` must be a `nn.Module` when using the adjoint method. This is used to collect parameters of the differential equation.
-
-### Keyword Arguments
- - `rtol` Relative tolerance.
- - `atol` Absolute tolerance.
- - `method` One of the solvers listed below.
-
-#### List of ODE Solvers:
-
-Adaptive-step:
- - `dopri5` Runge-Kutta 4(5) [default].
- - `adams` Adaptive-order implicit Adams.
-
-Fixed-step:
- - `euler` Euler method.
- - `midpoint` Midpoint method.
- - `rk4` Fourth-order Runge-Kutta with 3/8 rule.
- - `explicit_adams` Explicit Adams.
- - `fixed_adams` Implicit Adams.
-
-### References
-[1] Ricky T. Q. Chen, Yulia Rubanova, Jesse Bettencourt, David Duvenaud. "Neural Ordinary Differential Equations." *Advances in Neural Processing Information Systems.* 2018. [[arxiv]](https://arxiv.org/abs/1806.07366)
-
----
+where `func` is an ODEJumpFunc object, `z0` is the initial latent state, and `tsave` contains the timestamps at which the latent state is recorded.
+For a full example usage of the libaray, please see [examples/](examples/).
 
 If you found this library useful in your research, please consider citing
 ```
-@article{chen2018neural,
-  title={Neural Ordinary Differential Equations},
-  author={Chen, Ricky T. Q. and Rubanova, Yulia and Bettencourt, Jesse and Duvenaud, David},
-  journal={Advances in Neural Information Processing Systems},
-  year={2018}
+@ARTICLE{2019arXiv190510403J,
+       author = {{Jia}, Junteng and {Benson}, Austin R.},
+        title = "{Neural Jump Stochastic Differential Equations}",
+      journal = {arXiv e-prints},
+     keywords = {Computer Science - Machine Learning, Statistics - Machine Learning},
+         year = "2019",
+        month = "May",
+          eid = {arXiv:1905.10403},
+        pages = {arXiv:1905.10403},
+archivePrefix = {arXiv},
+       eprint = {1905.10403},
+ primaryClass = {cs.LG},
+       adsurl = {https://ui.adsabs.harvard.edu/abs/2019arXiv190510403J},
+      adsnote = {Provided by the SAO/NASA Astrophysics Data System}
 }
-```
