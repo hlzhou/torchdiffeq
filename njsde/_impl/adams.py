@@ -183,7 +183,8 @@ class VariableCoefficientAdamsBashforth(AdaptiveStepsizeODESolver):
 class VariableCoefficientJumpAdamsBashforth(VariableCoefficientAdamsBashforth):
 
     def _adaptive_adams_step(self, vcabm_state, final_t):
-        assert vcabm_state.next_t > vcabm_state.prev_t[0], '(prev_t[0], next_t, final_t) = ({}, {}, {})'.format(vcabm_state.prev_t[0], vcabm_state.next_t, final_t)
+        assert vcabm_state.next_t > vcabm_state.prev_t[0], \
+            '(prev_t[0], next_t, final_t) = ({}, {}, {})'.format(vcabm_state.prev_t[0], vcabm_state.next_t, final_t)
 
         t0 = vcabm_state.prev_t[0]
         y0 = vcabm_state.y_n
@@ -193,7 +194,7 @@ class VariableCoefficientJumpAdamsBashforth(VariableCoefficientAdamsBashforth):
         if self.func.jump_type == "read":
             dy = self.func.read_jump(t0, y0)
             if dy[0].abs().sum() != 0:
-                y0 = tuple(y0_+dy_ for y0_, dy_ in zip(y0, dy))
+                y0 = tuple(y0_ + dy_ for y0_, dy_ in zip(y0, dy))
                 order0 = 1
             vcabm_state = vcabm_state._replace(y_n=y0,
                                                next_t=self.func.next_read_jump(vcabm_state.prev_t[0],
@@ -234,4 +235,3 @@ class VariableCoefficientJumpAdamsBashforth(VariableCoefficientAdamsBashforth):
 
         return _VCABMState(y1, prev_f, prev_t, next_t, prev_phi, order)
 ## [End NEW]
-

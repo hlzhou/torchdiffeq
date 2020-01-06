@@ -1,1 +1,0 @@
-Namespace(batch_size=30, dataset='poisson', debug=False, evnt_align=False, jump_type='read', niters=5000, nsave=500, paramr='params.pth', paramw='params.pth', restart=False, seed0=True, suffix='')

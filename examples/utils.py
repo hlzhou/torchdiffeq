@@ -101,10 +101,10 @@ def create_tsave(tmin, tmax, dt, evnts_raw, evnt_align=False):
     :param dt: step size
     :param evnts_raw: tuple (raw_time, ...)
     :param evnt_align: whether to round the event time up to the next grid point
-    :return tsave: the time to save state in ODE simulation
-    :return gtid: grid time id
+    :return tsave: the time to save state in ODE simulation (merged grid of times)
+    :return gtid: grid time id (idxs of original grid in the new grid)
     :return evnts: tuple (rounded_time, ...)
-    :return tse: tuple (event_time_id, ...)
+    :return tse: tuple (event_time_id, ...); (index of first event, followed by remaining events)
     """
 
     if evnt_align:
@@ -114,20 +114,37 @@ def create_tsave(tmin, tmax, dt, evnts_raw, evnt_align=False):
 
     evnts = [(tc(evnt[0]),) + evnt[1:] for evnt in evnts_raw if tmin < tc(evnt[0]) < tmax]
 
-    tgrid = np.round(np.arange(tmin, tmax+dt, dt), decimals=8)
-    tevnt = np.array([evnt[0] for evnt in evnts])
-    tsave = np.sort(np.unique(np.concatenate((tgrid, tevnt))))
-    t2tid = {t: tid for tid, t in enumerate(tsave)}
+    tgrid = np.round(np.arange(tmin, tmax+dt, dt), decimals=8)  # grid of times
+    tevnt = np.array([evnt[0] for evnt in evnts])  # time of event
+    tsave = np.sort(np.unique(np.concatenate((tgrid, tevnt))))  # new merged grid of times
+    t2tid = {t: tid for tid, t in enumerate(tsave)}  # time to idx in new merged grid
 
     # g(rid)tid
     # t(ime)s(equence)n(ode)e(vent)
-    gtid = [t2tid[t] for t in tgrid]
-    tse = [(t2tid[evnt[0]],) + evnt[1:] for evnt in evnts]
+    gtid = [t2tid[t] for t in tgrid]  # idxs of original grid in the new grid
+    tse = [(t2tid[evnt[0]],) + evnt[1:] for evnt in evnts]  # index of first event, followed by remaining events
 
     return torch.tensor(tsave), gtid, evnts, tse
 
 
-def forward_pass(func, z0, tspan, dt, batch, evnt_align, gs_info=None, type_forecast=[0.0], predict_first=True, rtol=1.0e-5, atol=1.0e-7, scale=1.0):
+def forward_pass(func, z0, tspan, dt, batch, evnt_align,
+                 gs_info=None, type_forecast=[0.0], predict_first=True,
+                 rtol=1.0e-5, atol=1.0e-7, scale=1.0):
+    """
+    :param func: dynamics
+    :param z0: initial state
+    :param tspan: tuple of timespans, e.g. (0.0, 100.0)
+    :param dt: time increment, e.g. 0.05
+    :param batch: list of lists of tuples. [[(ts[i] * scale, (ts[i] - ts[i-1]) * scale * feature_scale), ...], ...]
+    :param evnt_align: whether to align events
+    :param gs_info:
+    :param type_forecast:
+    :param predict_first:
+    :param rtol:
+    :param atol:
+    :param scale:
+    :return:
+    """
     # merge the sequences to create a sequence
     evnts_raw = sorted([(evnt[0],) + (sid,) + evnt[1:] for sid in range(len(batch)) for evnt in batch[sid]])
 
@@ -148,7 +165,7 @@ def forward_pass(func, z0, tspan, dt, batch, evnt_align, gs_info=None, type_fore
 
     def integrate(tt, ll):
         lm = (ll[:-1, ...] + ll[1:, ...]) / 2.0
-        dts = (tt[1:] - tt[:-1]).reshape((-1,)+(1,)*(len(lm.shape)-1)).float()
+        dts = (tt[1:] - tt[:-1]).reshape((-1,) + (1,) * (len(lm.shape) - 1)).float()
         return (lm * dts).sum()
 
     log_likelihood = -integrate(tsave, lmbda)
@@ -196,7 +213,7 @@ def forward_pass(func, z0, tspan, dt, batch, evnt_align, gs_info=None, type_fore
                 et_error.append((mean_preds - func.evnt_embed(evnt[-func.dim_N:])).norm(dim=-1))
             seqs_happened.add(evnt[1])
 
-        METE = sum(et_error)*scale/len(et_error) if len(et_error) > 0 else -torch.ones(len(type_forecast))
+        METE = sum(et_error) * scale / len(et_error) if len(et_error) > 0 else -torch.ones(len(type_forecast))
 
     if func.evnt_embedding == "discrete":
         return tsave, trace, lmbda, gtid, tse, -log_likelihood, METE
@@ -215,12 +232,25 @@ def poisson_lmbda(tmin, tmax, dt, lmbda0, TS):
 
 
 def exponential_hawkes_lmbda(tmin, tmax, dt, lmbda0, alpha, beta, TS, evnt_align=False):
-    if evnt_align:
+    """Compute the exponential hawkes process intensities for a list of time series TS.
+
+    :param tmin: minimum time
+    :param tmax: maximum time
+    :param dt: time delta
+    :param lmbda0: background rate
+    :param alpha: alpha used in exponential Hawkes process intensity
+    :param beta: alpha used in exponential Hawkes process intensity
+    :param TS: list of timeseries (ts), each of which is a list of tuples (records)
+    :param evnt_align: when computing intensity, whether to align the event
+    :return: lambdas for each time series (intensities), given as a list of arrays
+    """
+
+    if evnt_align:  # function outputting aligned time
         tc = lambda t: np.round(np.ceil((t-tmin) / dt) * dt + tmin, decimals=8)
     else:
         tc = lambda t: t
 
-    cl = lambda t: np.round(np.ceil((t-tmin) / dt) * dt + tmin, decimals=8)
+    cl = lambda t: np.round(np.ceil((t-tmin) / dt) * dt + tmin, decimals=8)  # align according to dt interval
     grid = np.round(np.arange(tmin, tmax+dt, dt), decimals=8)
     t2tid = {t: tid for tid, t in enumerate(grid)}
 

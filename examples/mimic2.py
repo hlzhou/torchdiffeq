@@ -79,13 +79,18 @@ if __name__ == '__main__':
     TSTE = TS[int(nseqs*0.2*args.fold):int(nseqs*0.2*(args.fold+1))]
 
     # initialize / load model
-    func = ODEJumpFunc(dim_c, dim_h, dim_N, dim_N, dim_hidden=64, num_hidden=1, ortho=True, jump_type=args.jump_type, evnt_align=args.evnt_align, activation=nn.CELU())
+    func = ODEJumpFunc(dim_c, dim_h, dim_N, dim_N,
+                       dim_hidden=64,
+                       num_hidden=1,
+                       ortho=True,
+                       jump_type=args.jump_type,
+                       evnt_align=args.evnt_align,
+                       activation=nn.CELU())
     c0 = torch.randn(dim_c, requires_grad=True)
     h0 = torch.zeros(dim_h)
     it0 = 0
     optimizer = optim.Adam([{'params': func.parameters()},
-                            {'params': c0, 'lr': 1.0e-2},
-                            ], lr=1e-3, weight_decay=1e-5)
+                            {'params': c0, 'lr': 1.0e-2}], lr=1e-3, weight_decay=1e-5)
 
     if args.restart:
         checkpoint = torch.load(args.paramr)

@@ -1,0 +1,51 @@
+point_processes_rvl.py:
+* initializes func = ODEJumpFunc(...)
+* iterates through some number of iterations and calls 
+	forward_pass(func, (c0, h0), tspan, dt, batch, args.event_align, scale=1.0/feature_scale)
+
+ODEJumpFunc (in modules.py):
+* abbreviations:
+	c = internal state
+	h = state memory
+	N = event types
+	E = dimension of event encoding
+
+* self.F (MLP1): 			dim_c + dim_h --> dim_c; dcdt = F(z)
+* self.G (MLP2): 			dim_c --> dim_h, output nn.Softplus; dhdt = -G(c) * h
+
+^ forward(...) computes dcdt and dhdt
+
+* self.evnt_embed (k(t)): 	event k --> tensor
+* self.W (MLP3): 			dim_c + dim_E --> dim_h
+* self.L (MLP4): 			dim_c + dim_h --> dim_N * (1 + 2 * dim_E), 
+							output Softplus(dim=dim_N) (on first dim_N values)
+
+next_read_jump(...) finds the next event's t
+read_jump(...) return the jump (has same dimensions as z)
+
+
+evnts:
+evnts_raw = sorted([(evnt[0],) + (sid,) + evnt[1:] for sid in range(len(batch)) for evnt in batch[sid]])
+evnts = [(tc(evnt[0]),) + evnt[1:] for evnt in evnts_raw if tmin < tc(evnt[0]) < tmax]
+
+evnts = [(time, idx into batch, ts[i] * scale, (ts[i] - ts[i-1]) * scale * feature_scale)]
+
+
+forward_pass (in utils.py):
+* abbreviations:
+	func = ODEJumpFunc
+	z0 = initial state
+	tspan = tuple of timespans, e.g. (0.0, 100.0)
+	dt = time increment, e.g. 0.05
+	batch = list of lists of tuples. 
+		[[(ts[i] * scale, (ts[i] - ts[i-1]) * scale * feature_scale), ...], ...]
+	evnt_align = whether to align events
+* merge sequences of events
+* create_tsave(...): create tsave (merged time grid), gtid (idxs of original grid in the new grid), evnts (starting w/ rounded time), tse (events starting with index of first event)
+* pass func (including evnts), z0, and tsave to odeint using 'jump_adams'
+	^ odeint basically reads from events as needed to adjust the jumps accordingly when integrating
+* integrate intensity across the time grid to get a log likelihood
+* compute errors/ likelihoods of events and add to loss
+* return tsave, trace, lmbda, gtid, tse, -log_likelihood, METE, gsmean, var
+
+

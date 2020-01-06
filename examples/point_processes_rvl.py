@@ -1,3 +1,5 @@
+"""Examples for real-valued targets."""
+
 import sys
 import subprocess
 import signal
@@ -8,8 +10,8 @@ import matplotlib
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from modules import RunningAverageMeter, ODEJumpFunc
-from utils import poisson_lmbda, exponential_hawkes_lmbda, powerlaw_hawkes_lmbda, self_inhibiting_lmbda, forward_pass, visualize, create_outpath
+from .modules import RunningAverageMeter, ODEJumpFunc
+from .utils import poisson_lmbda, exponential_hawkes_lmbda, powerlaw_hawkes_lmbda, self_inhibiting_lmbda, forward_pass, visualize, create_outpath
 
 signal.signal(signal.SIGINT, lambda sig, frame: sys.exit(0))
 
@@ -30,6 +32,7 @@ parser.add_argument('--seed0', dest='seed0', action='store_true')
 parser.add_argument('--debug', dest='debug', action='store_true')
 args = parser.parse_args()
 
+# set up logging to files named with corresponding commit
 outpath = create_outpath(args.dataset)
 commit = subprocess.check_output("git log --pretty=format:\'%h\' -n 1", shell=True).decode()
 if not args.debug:
@@ -37,7 +40,12 @@ if not args.debug:
     sys.stdout = open(outpath + '/' + commit + '.log', 'w')
     sys.stderr = open(outpath + '/' + commit + '.err', 'w')
 
+
 def read_timeseries(filename, scale=1.0, feature_scale=1.0, num_seqs=sys.maxsize):
+    """Read a file containing timeseries of events. Each row corresponds to one timeseries, and ends with ';'.
+
+    Outputs a list of lists of tuples. [[(ts[i] * scale, (ts[i] - ts[i-1]) * scale * feature_scale), ...], ...]
+    """
     with open(filename) as f:
         seqs = f.readlines()[:num_seqs]
 
@@ -72,6 +80,7 @@ if __name__ == '__main__':
     TSVA = read_timeseries(path + args.dataset + "_validation.csv", 1.0, feature_scale)
     TSTE = read_timeseries(path + args.dataset + "_testing.csv", 1.0, feature_scale)
 
+    # compute the true intensities
     if args.dataset == "poisson":
         lmbda_va_real = poisson_lmbda(tspan[0], tspan[1], dt, 1.0, TSVA)
         lmbda_te_real = poisson_lmbda(tspan[0], tspan[1], dt, 1.0, TSTE)
@@ -86,13 +95,15 @@ if __name__ == '__main__':
         lmbda_te_real = self_inhibiting_lmbda(tspan[0], tspan[1], dt, 0.5, 0.2, TSTE, args.evnt_align)
 
     # initialize / load model
-    func = ODEJumpFunc(dim_c, dim_h, dim_N, dim_N, dim_hidden=20, num_hidden=1, ortho=True, jump_type=args.jump_type, evnt_align=args.evnt_align, activation=nn.CELU(), evnt_embedding="continuous")
+    func = ODEJumpFunc(dim_c, dim_h, dim_N, dim_N,
+                       dim_hidden=20, num_hidden=1, ortho=True,
+                       jump_type=args.jump_type, evnt_align=args.evnt_align,
+                       activation=nn.CELU(), evnt_embedding="continuous")
     c0 = torch.randn(dim_c, requires_grad=True)
     h0 = torch.zeros(dim_h)
     it0 = 0
-    optimizer = optim.Adam([{'params': func.parameters()},
-                            {'params': c0, 'lr': 1.0e-2},
-                            ], lr=1e-4, weight_decay=1e-5)
+    optimizer = optim.Adam([{'params': func.parameters()}, {'params': c0, 'lr': 1.0e-2}],
+                           lr=1e-4, weight_decay=1e-5)
 
     if args.restart:
         checkpoint = torch.load(args.paramr)
@@ -116,7 +127,9 @@ if __name__ == '__main__':
             batch = [TSTR[seqid] for seqid in batch_id]
 
             # forward pass
-            tsave, trace, lmbda, gtid, tsne, loss, mete, gsmean, gsvar = forward_pass(func, torch.cat((c0, h0), dim=-1), tspan, dt, batch, args.evnt_align, scale=1.0/feature_scale)
+            tsave, trace, lmbda, gtid, tsne, loss, mete, gsmean, gsvar = forward_pass(func, torch.cat((c0, h0), dim=-1),
+                                                                                      tspan, dt, batch, args.evnt_align,
+                                                                                      scale=1.0/feature_scale)
             loss_meter.update(loss.item() / len(batch))
 
             # backward prop
@@ -146,7 +159,6 @@ if __name__ == '__main__':
 
                 # save
                 torch.save({'func_state_dict': func.state_dict(), 'c0': c0, 'h0': h0, 'it0': it, 'optimizer_state_dict': optimizer.state_dict()}, outpath + '/' + str(it) + '_' + args.paramw)
-
 
     # computing testing error
     tsave, trace, lmbda, gtid, tsne, loss, mete, gsmean, gsvar = forward_pass(func, torch.cat((c0, h0), dim=-1), tspan, dt, TSTE, args.evnt_align, scale=1.0/feature_scale)
